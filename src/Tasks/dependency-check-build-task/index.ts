@@ -1,8 +1,6 @@
-import task = require('azure-pipelines-task-lib/task');
-import tool = require('azure-pipelines-tool-lib/tool');
-import path = require('path');
-import fs = require('fs');
-import http = require('typed-rest-client/HttpClient');
+import * as task from 'azure-pipelines-task-lib/task';
+import * as tool from 'azure-pipelines-tool-lib/tool';
+import * as path from 'path';
 
 async function run() {
     try {
