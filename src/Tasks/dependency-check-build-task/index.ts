@@ -1,4 +1,8 @@
 import task = require('azure-pipelines-task-lib/task');
+import tool = require('azure-pipelines-tool-lib/tool');
+import path = require('path');
+import fs = require('fs');
+import http = require('typed-rest-client/HttpClient');
 
 async function run() {
     try {
@@ -18,7 +22,7 @@ async function run() {
 
         // Create reports directory
         const testDirectory: string = task.getVariable('Common.TestResultsDirectory');
-        const reportsDirectory: string = testDirectory + '/dependency-check';
+        const reportsDirectory: string = path.join(testDirectory, 'dependency-check');
 
         // Check if report directory does not exist
         if (!task.exist(reportsDirectory)) {
@@ -33,7 +37,7 @@ async function run() {
         args.push(`--out "${reportsDirectory}"`);
 
         // Exclude switch
-        const localPath = task.getVariable('Build.Repository.LocalPath');
+        const localPath: string = task.getVariable('Build.Repository.LocalPath');
         if (localPath !== excludePath) {
             args.push(`--exclude "${excludePath}`);
         }
@@ -44,8 +48,8 @@ async function run() {
         })
 
         // Fail on CVSS switch
-        if (typeof failOnCVSS !== 'undefined') {
-            let failOnCVSSValue = parseInt(failOnCVSS);
+        if (failOnCVSS) {
+            let failOnCVSSValue: number = parseInt(failOnCVSS);
             args.push(`--failOnCvss ${failOnCVSSValue}`);
         }
 
@@ -54,26 +58,62 @@ async function run() {
             args.push(`--suppression "${suppressionPath}"`);
         }
 
-        //Set enableExperimental option if requested
+        // Set enableExperimental option if requested
         if (enableExperimental){
             args.push('--enableExperimental');
         }
 
-        //Set enableRetired option if requested
+        // Set enableRetired option if requested
         if (enableRetired){
             args.push('--enableRetired');
         }
 
-        //Set log switch if requested
+        // Set log switch if requested
         if(enableVerbose) {
-            args.push(`--log "${reportsDirectory}/log"`);
+            args.push(`--log "${path.join(reportsDirectory, 'log')}"`);
         }
 
         // additionalArguments
-        if(typeof additionalArguments !== 'undefined') {
+        if(additionalArguments) {
             args.push(additionalArguments);
         }
 
+        // Check for dependency-check in tool cache
+        let toolPath: string = tool.findLocalTool('dependency-check', '5.3.2', 'x64');
+        
+        // Download the tool if it does not exist
+        if (!toolPath) {
+            const url: string = 'https://dl.bintray.com/jeremy-long/owasp/dependency-check-5.3.2-release.zip';
+
+            // Download the .zip and extract it
+            const downloadPath: string = await tool.downloadTool(url);
+            const extractPath: string = await tool.extractZip(downloadPath);
+
+            // Add to tool cache
+            let toolRoot = path.join(extractPath, 'dependency-check');
+            await tool.cacheDir(toolRoot, 'dependency-check', '5.3.2', 'x64');
+
+            // Find the tool that we just installed
+            toolPath = tool.findLocalTool('dependency-check', '5.3.2', 'x64');
+        }
+
+        // Add the bin folder of the tool to PATH
+        tool.prependPath(path.join(toolPath, 'bin'));
+
+        // Get dependency-check data dir path
+        const dataDirectory: string = path.join(toolPath, 'data');
+
+        // Pull JSON cached file
+        if (dataMirrorJson) {
+            console.log('Downloading Dependency Check vulnerability JSON data mirror...');
+            await tool.downloadTool(dataMirrorJson, path.join(dataDirectory, 'jsrepository.json'));
+        }
+
+        // Pull ODC cached file
+        if (dataMirrorOdc) {
+            console.log('Downloading Dependency Check vulnerability DB data mirror...');
+            await tool.downloadTool(dataMirrorOdc, path.join(dataDirectory, 'odc.mv.db'));
+        }
     }
     catch (err) {
         task.setResult(task.TaskResult.Failed, err.message);
