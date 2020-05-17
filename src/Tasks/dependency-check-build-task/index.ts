@@ -1,6 +1,8 @@
 import * as task from 'azure-pipelines-task-lib/task';
+import * as runner from 'azure-pipelines-task-lib/toolrunner';
 import * as tool from 'azure-pipelines-tool-lib/tool';
 import * as path from 'path';
+import * as os from 'os';
 
 async function run() {
     try {
@@ -30,19 +32,20 @@ async function run() {
 
         // Default args
         let args: string[] = [];
-        args.push(`--project "${projectName}"`);
-        args.push(`--scan "${scanPath}"`);
-        args.push(`--out "${reportsDirectory}"`);
+        //args.push(`--project ${projectName}`);
+        //args.push(`--scan ${scanPath}`);
+        //args.push(`--out ${reportsDirectory}`);
+        args.push(`-v`);
 
         // Exclude switch
         const localPath: string = task.getVariable('Build.Repository.LocalPath');
         if (localPath !== excludePath) {
-            args.push(`--exclude "${excludePath}`);
+            args.push(`--exclude ${excludePath}`);
         }
 
         // Format type
         formats.forEach(f => {
-            args.push(`--format ${f}`);
+            //args.push(`--format ${f}`);
         })
 
         // Fail on CVSS switch
@@ -53,7 +56,7 @@ async function run() {
 
         // Suppression switch
         if (localPath !== suppressionPath){
-            args.push(`--suppression "${suppressionPath}"`);
+            args.push(`--suppression ${suppressionPath}`);
         }
 
         // Set enableExperimental option if requested
@@ -68,7 +71,7 @@ async function run() {
 
         // Set log switch if requested
         if(enableVerbose) {
-            args.push(`--log "${path.join(reportsDirectory, 'log')}"`);
+            args.push(`--log ${path.join(reportsDirectory, 'log')}`);
         }
 
         // additionalArguments
@@ -96,7 +99,7 @@ async function run() {
         }
 
         // Add the bin folder of the tool to PATH
-        tool.prependPath(path.join(toolPath, 'bin'));
+        //tool.prependPath(path.join(toolPath, 'bin'));
 
         // Get dependency-check data dir path
         const dataDirectory: string = path.join(toolPath, 'data');
@@ -112,6 +115,12 @@ async function run() {
             console.log('Downloading Dependency Check vulnerability DB data mirror...');
             await tool.downloadTool(dataMirrorOdc, path.join(dataDirectory, 'odc.mv.db'));
         }
+
+        const test: string = args.join(' ');
+        const depCheckPath: string = path.join(toolPath, 'bin/dependency-check.bat');
+        const depCheck: runner.ToolRunner = task.tool(depCheckPath).arg(test);
+        const code: number = await depCheck.exec();
+        console.log('rc=' + code);
     }
     catch (err) {
         task.setResult(task.TaskResult.Failed, err.message);
